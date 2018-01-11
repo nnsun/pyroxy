@@ -23,32 +23,33 @@ def start_proxy():
 
 def server_info(data):
     if len(data) == 0:
-        return None
+        return (None, None, None)
 
     url = data.decode('latin-1').split(' ')[1]
+    port = 80
+    server = url
+    path = ""
 
+    # strip protocol from URL
     http_pos = url.find("://")
     if http_pos != -1:
         url = url[http_pos + 3:]
+        if url[:http_pos].lower().find("https") != -1:
+            port = 443
 
+    # get port number
     port_pos = url.find(":")
-
-    webserver_pos = url.find("/")
-    if webserver_pos == -1:
-        webserver_pos = len(url)
-    server = ""
-    port = 80
-    server = url[:webserver_pos]
     if port_pos != -1:
-        try:
-            port = int((url[port_pos + 1:])[:webserver_pos - port_pos - 1])
-            server = url[:port_pos]
-        except ValueError:
-            with open('error.log', 'a') as f:
-                f.write("VALUE ERROR\n")
-                f.write(url.decode('latin-1') + '\n')
-    return (server, port)
+        server = url[:port_pos]
+        port = int(url[port_pos + 1:])
 
+    # get relative path
+    path_pos = url.find("/")
+    if path_pos != -1:
+        server = url[:path_pos]
+        path = url[path_pos:port_pos]
+
+    return (server, port, path)
 
 
 class ConnectionThread(threading.Thread):
@@ -58,30 +59,36 @@ class ConnectionThread(threading.Thread):
         self.data = data
         self.addr = addr
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        (self.server, self.port, self.path) = server_info(self.data)
 
     def run(self):
-        info = server_info(self.data)
-        if info is None:
+        if self.server is None:
             return
 
-        (server, port) = info
-        self.server_socket.connect((server, port))
+        self.server_socket.connect((self.server, self.port))
 
-        logging.info("Connection to %s:%d requested" % (server, port))
+        logging.info("Connection to %s:%d requested" % (self.server, self.port))
 
         if self.data[:7] == b"CONNECT":
             self.client_socket.send(b"HTTP/1.0 200 Connection established\r\n\r\n")
             self.exchange()
         else:
-            self.server_socket.send(self.data)
+            (method, tail) = self.parse_request()
+            self.server_socket.send(b"%s %s %s" % (method, bytes(self.path, encoding='latin-1'), tail))
             self.exchange()
-        logging.info("Connection to %s:%d closed" % (server, port))
+        self.client_socket.close()
+        self.server_socket.close()
+        logging.info("Connection to %s:%d closed" % (self.server, self.port))
+
+    def parse_request(self):
+        split_str = self.data.decode('latin-1').split(' ', maxsplit=2)
+        return (bytes(split_str[0], encoding='latin-1'), bytes(split_str[2], encoding='latin-1'))
 
     def exchange(self):
         sockets = [self.client_socket, self.server_socket]
         exit_flag = False
         while not exit_flag:
-            (recv, _, error) = select.select(sockets, [], sockets, 5)
+            (recv, _, error) = select.select(sockets, [], sockets, 15)
             if len(recv) == 0 or error:
                 break
             for sock in recv:
