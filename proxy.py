@@ -1,3 +1,4 @@
+import datetime
 import logging
 import select
 import socket
@@ -121,6 +122,19 @@ class ConnectionThread(threading.Thread):
                 else:
                     self.client_socket.send(data)
 
+def reset_usage():
+    for domain in domains:
+        (_, limit) = domains[domain]
+        domains[domain] = (0, limit)
+    timer = threading.Timer(secs_left_in_day(), reset_usage)
+    timer.start()
+
+def secs_left_in_day():
+    now = datetime.datetime.now()
+    tomorrow = now + datetime.timedelta(days=1)
+    delta =  datetime.datetime.combine(tomorrow, datetime.time.min) - now
+    return delta.seconds
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="[%(asctime)s] %(message)s", datefmt='%m/%d/%Y %H:%M:%S')
     try:
@@ -129,6 +143,8 @@ if __name__ == "__main__":
             input_str = input().strip().lower()
 
             if input_str == "start":
+                timer = threading.Timer(secs_left_in_day(), reset_usage)
+                timer.start()
                 start_proxy()
                 break
 
@@ -148,3 +164,6 @@ if __name__ == "__main__":
                 print("Error: invalid command.")
     except KeyboardInterrupt:
         logging.info("Execution ended by user, shutting down all active threads...")
+        timers = [t for t in threading.enumerate() if type(t) == threading.Timer]
+        for timer in timers:
+            timer.cancel()
