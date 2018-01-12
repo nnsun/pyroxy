@@ -9,15 +9,16 @@ local_host = "127.0.0.1"
 local_port = 8080
 max_conn = 10
 buffer_size = 4096
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+domains = {}
 
 def start_proxy():
-    client_socket.bind((local_host, local_port))
-    client_socket.listen(max_conn)
+    proxy_socket.bind((local_host, local_port))
+    proxy_socket.listen(max_conn)
     logging.info("Proxy started, listening at %s:%d" % (local_host, local_port))
 
     while True:
-        (conn, addr) = client_socket.accept()
+        (conn, addr) = proxy_socket.accept()
         data = conn.recv(buffer_size)
         ConnectionThread(conn, data, addr).start()
 
@@ -69,6 +70,23 @@ class ConnectionThread(threading.Thread):
 
         logging.info("Connection to %s:%d requested" % (self.server, self.port))
 
+        tld_index = self.server.rfind('.')
+        tld = self.server[tld_index:]
+        head = self.server[:tld_index]
+        sld_index = head.rfind('.')
+        sld = head[sld_index + 1:]
+        domain = sld + tld
+
+        if domain in domains:
+            (usage, limit) = domains[domain]
+            if usage >= limit:
+                self.client_socket.send(b"Usage over limit.")
+                self.close_connection()
+                return
+            usage += len(self.data) / 1024
+            print(usage, limit)
+            domains[domain] = (usage, limit)
+
         if self.data[:7] == b"CONNECT":
             self.client_socket.send(b"HTTP/1.0 200 Connection established\r\n\r\n")
             self.exchange()
@@ -76,6 +94,9 @@ class ConnectionThread(threading.Thread):
             (method, tail) = self.parse_request()
             self.server_socket.send(b"%s %s %s" % (method, bytes(self.path, encoding='latin-1'), tail))
             self.exchange()
+            self.close_connection()
+
+    def close_connection(self):
         self.client_socket.close()
         self.server_socket.close()
         logging.info("Connection to %s:%d closed" % (self.server, self.port))
@@ -103,6 +124,27 @@ class ConnectionThread(threading.Thread):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="[%(asctime)s] %(message)s", datefmt='%m/%d/%Y %H:%M:%S')
     try:
-        start_proxy()
+        while True:
+            print('Enter "add" to start tracking a domain\'s usage, or "start" to start the proxy.')
+            input_str = input().strip().lower()
+
+            if input_str == "start":
+                start_proxy()
+                break
+
+            if input_str == "add":
+                print("Please enter the domain you'd like to track. Example: facebook.com")
+                domain = input().strip().lower()
+                print("Please enter the maximum amount of traffic to allow the domain (in MB).")
+                limit = input().strip()
+                while not limit.isdecimal():
+                    print("Please enter a valid integer.")
+                    limit = input().strip()
+                limit = int(limit)
+                domains[domain] = (0, limit)
+                print("%s has been added to the list of tracked deomains, with a limit of %d MB." % (domain, limit))
+
+            else:
+                print("Error: invalid command.")
     except KeyboardInterrupt:
         logging.info("Execution ended by user, shutting down all active threads...")
