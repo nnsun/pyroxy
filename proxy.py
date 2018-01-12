@@ -80,7 +80,7 @@ class ConnectionThread(threading.Thread):
         if domain in domains:
             (usage, limit) = domains[domain]
             if usage >= limit:
-                self.client_socket.send(b"Usage over limit.")
+                self.client_socket.send(b"HTTP/1.1 413 Usage over limit\r\n\r\n")
                 self.close_connection()
                 return
             usage += len(self.data) / 1024
@@ -88,7 +88,7 @@ class ConnectionThread(threading.Thread):
             domains[domain] = (usage, limit)
 
         if self.data[:7] == b"CONNECT":
-            self.client_socket.send(b"HTTP/1.0 200 Connection established\r\n\r\n")
+            self.client_socket.send(b"HTTP/1.1 200 Connection established\r\n\r\n")
             self.exchange()
         else:
             (method, tail) = self.parse_request()
@@ -141,7 +141,7 @@ if __name__ == "__main__":
                     print("Please enter a valid integer.")
                     limit = input().strip()
                 limit = int(limit)
-                domains[domain] = (0, limit)
+                domains[domain] = (0, limit * 1024)
                 print("%s has been added to the list of tracked deomains, with a limit of %d MB." % (domain, limit))
 
             else:
