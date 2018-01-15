@@ -164,12 +164,15 @@ def parse_domain(url):
     domain = sld + tld
     return domain
 
+def sort_usages(usages):
+    return sorted(usages.items(), key=lambda x:x[1], reverse=True)
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="[%(asctime)s] %(message)s", datefmt='%m/%d/%Y %H:%M:%S')
     proxy_thread = None
     try:
         while True:
-            print('Enter "add" to start tracking a domain\'s usage, or "start" to start the proxy.')
+            print('Enter "add" to start tracking a domain\'s usage, or "start"/"stop" to start or stop the proxy server.')
             input_str = input().strip().lower()
 
             if input_str == "start":
@@ -185,6 +188,9 @@ if __name__ == "__main__":
                 if proxy_thread is not None:
                     proxy_thread.stop_proxy()
                     proxy_thread = None
+
+            elif input_str == "usage":
+                print(sort_usages(usages))
 
             elif input_str == "add":
                 print("Please enter the domain you'd like to track. Example: facebook.com")
@@ -207,3 +213,4 @@ if __name__ == "__main__":
             timer.cancel()
         if proxy_thread is not None:
             proxy_thread.stop_proxy()
+        print(sort_usages(usages))
