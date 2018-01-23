@@ -91,7 +91,7 @@ class ConnectionThread(threading.Thread):
             print("Attempted to connect to: " + self.server)
             return
 
-        logging.info("Connection to %s:%d requested" % (self.server, self.port))
+        logging.debug("Connection to %s:%d requested" % (self.server, self.port))
 
         if self.domain not in usages:
             usages[self.domain] = 0
@@ -104,7 +104,7 @@ class ConnectionThread(threading.Thread):
                 self.close_connection()
                 return
             usage += len(self.data) / 1024
-            usage[self.domain] = usage
+            usages[self.domain] = usage
 
         if self.data[:7] == b"CONNECT":
             self.client_socket.send(b"HTTP/1.1 200 Connection established\r\n\r\n")
@@ -118,7 +118,7 @@ class ConnectionThread(threading.Thread):
     def close_connection(self):
         self.client_socket.close()
         self.server_socket.close()
-        logging.info("Connection to %s:%d closed" % (self.server, self.port))
+        logging.debug("Connection to %s:%d closed" % (self.server, self.port))
 
     def parse_request(self):
         split_str = self.data.decode('latin-1').split(' ', maxsplit=2)
@@ -168,7 +168,7 @@ def sort_usages(usages):
     return sorted(usages.items(), key=lambda x:x[1], reverse=True)
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, format="[%(asctime)s] %(message)s", datefmt='%m/%d/%Y %H:%M:%S')
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt='%m/%d/%Y %H:%M:%S')
     proxy_thread = None
     try:
         while True:
@@ -213,4 +213,3 @@ if __name__ == "__main__":
             timer.cancel()
         if proxy_thread is not None:
             proxy_thread.stop_proxy()
-        print(sort_usages(usages))
